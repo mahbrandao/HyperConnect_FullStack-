@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Plus, X, Clock, Calendar, Trash2, Ban } from
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
+import InstallerPicker from "@/components/ui/InstallerPicker";
 
 type ViewMode = "Mês" | "Semana" | "Lista";
 
@@ -20,6 +21,7 @@ type AppEvent = {
   projectId: string | null;
   projectTitle: string | null;
   createdBy: string | null;
+  installerIds: string[];
 };
 
 type EventRow = {
@@ -33,6 +35,7 @@ type EventRow = {
   status: string;
   project_id: string | null;
   created_by: string | null;
+  installer_ids: string[] | null;
   project: { title: string } | null;
 };
 
@@ -95,10 +98,11 @@ function mapRow(r: EventRow): AppEvent {
     projectId: r.project_id,
     projectTitle: r.project?.title ?? null,
     createdBy: r.created_by,
+    installerIds: r.installer_ids ?? [],
   };
 }
 
-const emptyForm = { title: "", type: eventTypes[0], date: "", time: "", sub: "", projectId: "" };
+const emptyForm = { title: "", type: eventTypes[0], date: "", time: "", sub: "", projectId: "", instaladorIds: [] as string[] };
 
 export default function Agenda() {
   const { user } = useUser();
@@ -113,6 +117,7 @@ export default function Agenda() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<AppEvent | null>(null);
+  const [instaladores, setInstaladores] = useState<{ id: string; name: string }[]>([]);
 
   const todayIso = isoOf(new Date());
 
@@ -121,9 +126,9 @@ export default function Agenda() {
     setLoading(true);
     let query = supabase
       .from("events")
-      .select("id, title, subtitle, event_type, event_date, event_time, color, status, project_id, created_by, project:projects!events_project_id_fkey(title)");
+      .select("id, title, subtitle, event_type, event_date, event_time, color, status, project_id, created_by, installer_ids, project:projects!events_project_id_fkey(title)");
     if (user.team !== "gerente" && user.team !== "admin") {
-      query = query.eq("created_by", user.id);
+      query = query.or(`created_by.eq.${user.id},installer_ids.cs.{${user.id}}`);
     }
     const { data, error } = await query.order("event_date", { ascending: true });
     if (error) setLoadError(error.message);
@@ -133,7 +138,11 @@ export default function Agenda() {
 
   useEffect(() => { loadEvents(); }, [user?.id]);
 
-  useEffect(() => { loadEvents(); }, []);
+  useEffect(() => {
+    supabase.from("profiles").select("id, name").eq("team", "instalacao").then(({ data }) => {
+      if (data) setInstaladores(data.map((p) => ({ id: p.id, name: p.name })));
+    });
+  }, []);
 
   if (!user) return null;
 
@@ -149,6 +158,10 @@ export default function Agenda() {
     return events.filter((e) => e.date === iso).sort((a, b) => a.time.localeCompare(b.time));
   }
 
+  function installerNames(ids: string[]) {
+    return ids.map((id) => instaladores.find((i) => i.id === id)?.name).filter(Boolean).join(", ");
+  }
+
   function validate() {
     const e: Record<string, string> = {};
     if (!form.title.trim()) e.title = "Informe o título.";
@@ -157,7 +170,7 @@ export default function Agenda() {
     return e;
   }
 
-    async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
     const errs = validate();
@@ -172,6 +185,7 @@ export default function Agenda() {
       color: typeColorMap[form.type] || "orange",
       project_id: form.projectId || null,
       created_by: user.id,
+      installer_ids: form.instaladorIds,
     });
     setSaving(false);
     if (error) { setErrors({ title: `Erro ao salvar: ${error.message}` }); return; }
@@ -198,7 +212,8 @@ export default function Agenda() {
     await loadEvents();
   }
 
-  const canEdit = (ev: AppEvent) => user.team === "gerente" || user.team === "admin" || ev.createdBy === user.id;
+  const canEdit = (ev: AppEvent) =>
+    user.team === "gerente" || user.team === "admin" || ev.createdBy === user.id || ev.installerIds.includes(user.id);
 
   const inputCls = "w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#444] outline-none focus:border-[#f5c518]/50 transition-colors";
   const sortedEvents = [...events].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
@@ -212,7 +227,7 @@ export default function Agenda() {
           <p className="text-[#888] text-sm">Confira os compromissos e atividades programadas.</p>
         </div>
         <button
-          onClick={() => { setOpen(true); setErrors({}); }}
+          onClick={() => { setOpen(true); setErrors({}); setForm(emptyForm); }}
           className="bg-[#f5c518] text-black font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-[#e6b800] transition-colors"
         >
           <Plus size={16} />
@@ -405,6 +420,9 @@ export default function Agenda() {
               <div className="flex items-center gap-2"><Clock size={14} className="text-[#555]" />{selected.time}</div>
               {selected.projectTitle && <div className="text-xs text-[#888]">Projeto: <span className="text-[#ccc]">{selected.projectTitle}</span></div>}
               {selected.sub && <div className="text-xs text-[#888]">Local/descrição: <span className="text-[#ccc]">{selected.sub}</span></div>}
+              {selected.installerIds.length > 0 && (
+                <div className="text-xs text-[#888]">Equipe de instalação: <span className="text-[#ccc]">{installerNames(selected.installerIds) || "—"}</span></div>
+              )}
               {selected.status === "cancelado" && <div className="text-xs text-red-400">Este compromisso foi cancelado.</div>}
             </div>
             {canEdit(selected) && (
@@ -427,7 +445,7 @@ export default function Agenda() {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="relative bg-[#111] border border-[#222] rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="relative bg-[#111] border border-[#222] rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-5 border-b border-[#1e1e1e]">
               <div>
                 <h2 className="text-base font-bold text-white">Novo compromisso</h2>
@@ -476,6 +494,19 @@ export default function Agenda() {
                 <label className="block text-xs font-medium text-[#888] mb-1.5">Local / Descrição <span className="text-[#555]">(opcional)</span></label>
                 <input className={inputCls} placeholder="Ex: Endereço do cliente, Online…" value={form.sub} onChange={(e) => setForm({ ...form, sub: e.target.value })} />
               </div>
+
+              {user.team !== "instalacao" && (
+                <div>
+                  <label className="block text-xs font-medium text-[#888] mb-1.5">
+                    Equipe de instalação <span className="text-[#555]">({form.instaladorIds.length} selecionado(s))</span>
+                  </label>
+                  <InstallerPicker
+                    options={instaladores}
+                    selected={form.instaladorIds}
+                    onChange={(ids) => setForm({ ...form, instaladorIds: ids })}
+                  />
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setOpen(false)} className="flex-1 py-2.5 rounded-lg border border-[#222] text-sm text-[#888] hover:text-white hover:border-[#333] transition-colors font-medium">
