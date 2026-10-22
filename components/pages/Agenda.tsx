@@ -117,15 +117,21 @@ export default function Agenda() {
   const todayIso = isoOf(new Date());
 
   async function loadEvents() {
+    if (!user) return;
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("events")
-      .select("id, title, subtitle, event_type, event_date, event_time, color, status, project_id, created_by, project:projects!events_project_id_fkey(title)")
-      .order("event_date", { ascending: true });
+      .select("id, title, subtitle, event_type, event_date, event_time, color, status, project_id, created_by, project:projects!events_project_id_fkey(title)");
+    if (user.team !== "gerente" && user.team !== "admin") {
+      query = query.eq("created_by", user.id);
+    }
+    const { data, error } = await query.order("event_date", { ascending: true });
     if (error) setLoadError(error.message);
     else { setLoadError(null); setEvents((data as unknown as EventRow[]).map(mapRow)); }
     setLoading(false);
   }
+
+  useEffect(() => { loadEvents(); }, [user?.id]);
 
   useEffect(() => { loadEvents(); }, []);
 
