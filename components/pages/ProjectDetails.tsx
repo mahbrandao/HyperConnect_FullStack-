@@ -178,6 +178,7 @@ export default function ProjectDetails() {
           <h1 className="mt-2 text-2xl font-bold text-white">{project.title}</h1>
         </div>
         <div className="flex items-center gap-3">
+             {!isInstalacao && (
           <button
             type="button"
             onClick={() => setEditingProject(project)}
@@ -186,6 +187,8 @@ export default function ProjectDetails() {
             <PencilLine size={15} />
             Editar projeto
           </button>
+          )}
+          
           <Link
             href="/app/projects"
             className="inline-flex items-center gap-2 rounded-lg border border-[#222] bg-[#111] px-3 py-2 text-sm text-[#ddd] hover:bg-[#1a1a1a]"
