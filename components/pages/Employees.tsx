@@ -183,13 +183,25 @@ export default function Employees() {
     await loadEmployees();
   }
 
-  async function handleSubmit(evt: React.FormEvent) {
+   async function handleSubmit(evt: React.FormEvent) {
     evt.preventDefault();
+    if (saving) return;
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     if (editingId) { await handleEditSubmit(); return; }
 
     setSaving(true);
+
+    const { data: existing } = await supabase
+      .from("employees")
+      .select("id")
+      .ilike("email", form.email.trim())
+      .limit(1);
+    if (existing && existing.length > 0) {
+      setSaving(false);
+      setErrors({ email: "Já existe um funcionário cadastrado com esse e-mail." });
+      return;
+    }
 
     const { error: empError } = await supabase.from("employees").insert({
       name: form.name.trim(),
