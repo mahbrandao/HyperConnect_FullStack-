@@ -48,7 +48,6 @@ const emptyForm = {
   since: "",
   status: "Ativo" as Status,
   giveAccess: false,
-  accessEmail: "",
   accessTeam: "vendas" as AccessInvite["team"],
 };
 
@@ -191,6 +190,9 @@ export default function Employees() {
 
     setSaving(true);
 
+    // O funcionário é cadastrado primeiro. Se ele ganhar acesso, a conta criada
+    // em seguida usa o MESMO e-mail, e o banco liga a conta a este cadastro
+    // automaticamente (sem criar um funcionário duplicado).
     const { error: empError } = await supabase.from("employees").insert({
       name: form.name.trim(),
       email: form.email.trim(),
@@ -207,7 +209,8 @@ export default function Employees() {
       return;
     }
 
-    if (form.giveAccess && form.accessEmail.trim()) {
+    if (form.giveAccess) {
+      const accessEmail = form.email.trim();
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/admin/create-employee", {
         method: "POST",
@@ -217,23 +220,23 @@ export default function Employees() {
         },
         body: JSON.stringify({
           name: form.name.trim(),
-          email: form.accessEmail.trim(),
+          email: accessEmail,
           team: form.accessTeam,
           phone: form.phone.trim(),
         }),
       });
-      const result = await res.json();
+      const result = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setSaving(false);
-        setErrors({ name: `Funcionário salvo, mas o acesso falhou: ${result.error}` });
+        setErrors({ name: `Funcionário salvo, mas o acesso falhou: ${result.error ?? "erro"}` });
         await loadEmployees();
         return;
       }
 
-      setInvites(prev => [...prev, { email: form.accessEmail.trim(), team: form.accessTeam }]);
+      setInvites(prev => [...prev, { email: accessEmail, team: form.accessTeam }]);
       alert(
-        `Acesso criado!\n\nE-mail: ${form.accessEmail.trim()}\nSenha provisória: ${result.password}\n\nCompartilhe essa senha com o funcionário (ele(a) já pode trocar depois de entrar).`
+        `Acesso criado!\n\nE-mail: ${accessEmail}\nSenha provisória: ${result.password}\n\nCompartilhe essa senha com o funcionário (ele(a) já pode trocar depois de entrar).`
       );
     }
 
@@ -387,7 +390,7 @@ export default function Employees() {
 
               <div>
                 <label className="block text-xs font-medium text-[#888] mb-1.5">
-                  <span className="flex items-center gap-1.5"><Mail size={12} /> E-mail corporativo</span>
+                  <span className="flex items-center gap-1.5"><Mail size={12} /> E-mail</span>
                 </label>
                 <input type="email" className={inputCls} placeholder="nome@gmail.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
                 {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
@@ -431,36 +434,23 @@ export default function Employees() {
                   Dar acesso ao sistema
                 </label>
                 <p className="mt-2 text-[11px] text-[#888] leading-5">
-                  A conta de acesso já é criada aprovada, com uma senha provisória gerada automaticamente (mostrada na tela depois de salvar, pra você repassar ao funcionário).
+                  O login usa o mesmo e-mail informado acima. A conta já é criada aprovada, com uma senha provisória gerada automaticamente (mostrada na tela depois de salvar, pra você repassar ao funcionário).
                 </p>
               </div>}
 
               {!editingId && form.giveAccess && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-[#888] mb-1.5">E-mail de acesso</label>
-                    <input
-                      type="email"
-                      className={inputCls}
-                      placeholder="funcionario@gmail.com"
-                      value={form.accessEmail}
-                      onChange={e => setForm({ ...form, accessEmail: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-[#888] mb-1.5">Departamento de acesso</label>
-                    <select
-                      className={inputCls}
-                      value={form.accessTeam}
-                      onChange={e => setForm({ ...form, accessTeam: e.target.value as AccessInvite["team"] })}
-                    >
-                      <option value="gerente">Gerência</option>
-                      <option value="admin">Administração</option>
-                      <option value="vendas">Vendas</option>
-                      <option value="instalacao">Instalação</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#888] mb-1.5">Departamento de acesso</label>
+                  <select
+                    className={inputCls}
+                    value={form.accessTeam}
+                    onChange={e => setForm({ ...form, accessTeam: e.target.value as AccessInvite["team"] })}
+                  >
+                    <option value="gerente">Gerência</option>
+                    <option value="admin">Administração</option>
+                    <option value="vendas">Vendas</option>
+                    <option value="instalacao">Instalação</option>
+                  </select>
                 </div>
               )}
 

@@ -164,7 +164,7 @@ export default function Agenda() {
       event_time: form.time,
       color: typeColorMap[form.type] || "orange",
       project_id: form.projectId || null,
-      created_by: user.id,
+      created_by: user?.id,
     });
     setSaving(false);
     if (error) { setErrors({ title: `Erro ao salvar: ${error.message}` }); return; }
