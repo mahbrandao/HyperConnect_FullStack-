@@ -100,25 +100,27 @@ export default function ProjectDetails() {
   }
 
   async function handleSave(updatedProject: Project & { startDateISO?: string; endDateISO?: string; instaladorIds?: string[] }) {
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        title: updatedProject.title,
-        client: updatedProject.client,
-        type: updatedProject.type,
-        stage: updatedProject.stage,
-        is_priority: updatedProject.isPriority,
-        ...(user?.team !== "instalacao"
-          ? { value: updatedProject.value, valor_sistema: updatedProject.valorSistema ?? null, valor_mo: updatedProject.valorMO ?? null }
-          : {}),
-        progress: updatedProject.progress,
-        notes: updatedProject.notes ?? null,
-        start_date: updatedProject.startDateISO || null,
-        end_date: updatedProject.endDateISO || null,
-      })
-      .eq("id", updatedProject.id);
+    if (user?.team !== "instalacao") {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          title: updatedProject.title,
+          client: updatedProject.client,
+          type: updatedProject.type,
+          stage: updatedProject.stage,
+          is_priority: updatedProject.isPriority,
+          value: updatedProject.value,
+          valor_sistema: updatedProject.valorSistema ?? null,
+          valor_mo: updatedProject.valorMO ?? null,
+          progress: updatedProject.progress,
+          notes: updatedProject.notes ?? null,
+          start_date: updatedProject.startDateISO || null,
+          end_date: updatedProject.endDateISO || null,
+        })
+        .eq("id", updatedProject.id);
 
-    if (error) { alert(`Erro ao salvar: ${error.message}`); return; }
+      if (error) { alert(`Erro ao salvar: ${error.message}`); return; }
+    }
 
     if (updatedProject.instaladorIds && canManageTeamNow()) {
       const atuais = project?.instaladores.map((i) => i.id) ?? [];
@@ -184,7 +186,7 @@ export default function ProjectDetails() {
             className="inline-flex items-center gap-2 rounded-lg border border-[#f5c518]/40 bg-[#f5c518]/10 px-3 py-2 text-sm font-medium text-[#f5c518] hover:bg-[#f5c518]/15"
           >
             <PencilLine size={15} />
-            Editar projeto
+            {isInstalacao ? "Editar equipe" : "Editar projeto"}
           </button>
           <Link
             href="/app/projects"

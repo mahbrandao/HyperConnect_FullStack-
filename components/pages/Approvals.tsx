@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Clock3, ShieldCheck } from "lucide-react";
+import { Clock3, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import type { Team } from "@/interfaces/user";
@@ -20,6 +20,14 @@ const teamOptions: { value: Team; label: string }[] = [
   { value: "vendas", label: "Vendas" },
   { value: "instalacao", label: "Instalação" },
 ];
+
+// Cargo e departamento padrão de cada equipe ao virar funcionário
+const employeeDefaults: Record<string, { role: string; department: string }> = {
+  gerente: { role: "Gerente de Projetos", department: "Projetos" },
+  admin: { role: "Assistente Administrativo", department: "Administrativo" },
+  vendas: { role: "Vendedor", department: "Comercial" },
+  instalacao: { role: "Técnico de Campo", department: "Instalações" },
+};
 
 export default function Approvals() {
   const { user } = useUser();
@@ -49,16 +57,39 @@ export default function Approvals() {
 
   useEffect(() => { loadPending(); }, []);
 
-  async function handleApprove(id: string) {
-    const team = selected[id] ?? "vendas";
-    setApproving(id);
+  async function addAsEmployee(account: PendingAccount, team: Team) {
+    // Não duplica se já existir funcionário com esse e-mail
+    const { data: existing } = await supabase
+      .from("employees")
+      .select("id")
+      .ilike("email", account.email)
+      .maybeSingle();
+    if (existing) return;
+
+    const defaults = employeeDefaults[team] ?? employeeDefaults.vendas;
+    const { error } = await supabase.from("employees").insert({
+      name: account.name,
+      email: account.email,
+      phone: "",
+      role: defaults.role,
+      department: defaults.department,
+      since: new Date().toISOString().slice(0, 10),
+      status: "Ativo",
+    });
+    if (error) alert(`Conta aprovada, mas não foi possível adicionar em Funcionários: ${error.message}`);
+  }
+
+  async function handleApprove(account: PendingAccount) {
+    const team = selected[account.id] ?? "vendas";
+    setApproving(account.id);
     const { error } = await supabase
       .from("profiles")
       .update({ team, team_label: teamOptions.find(t => t.value === team)?.label })
-      .eq("id", id);
+      .eq("id", account.id);
+    if (error) { setApproving(null); alert(`Erro ao aprovar: ${error.message}`); return; }
+    await addAsEmployee(account, team);
     setApproving(null);
-    if (error) { alert(`Erro ao aprovar: ${error.message}`); return; }
-    setAccounts(prev => prev.filter(a => a.id !== id));
+    setAccounts(prev => prev.filter(a => a.id !== account.id));
   }
 
   if (user && user.team !== "gerente") return null;
@@ -67,7 +98,7 @@ export default function Approvals() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-white">Aprovações pendentes</h1>
-        <p className="text-[#888] text-sm mt-1">Defina o departamento das contas ainda sem acesso ao sistema.</p>
+        <p className="text-[#888] text-sm mt-1">Defina o departamento das contas ainda sem acesso ao sistema. Ao aprovar, a pessoa já entra em Funcionários.</p>
       </div>
 
       {loading && <div className="text-center py-16 text-[#555] text-sm">Carregando...</div>}
@@ -115,7 +146,7 @@ export default function Approvals() {
                     <button
                       type="button"
                       disabled={approving === account.id}
-                      onClick={() => handleApprove(account.id)}
+                      onClick={() => handleApprove(account)}
                       className="inline-flex items-center gap-2 rounded-lg bg-[#f5c518] px-3 py-2 text-sm font-bold text-black hover:bg-[#e6b800] transition-colors disabled:opacity-60"
                     >
                       <ShieldCheck size={14} />

@@ -181,7 +181,7 @@ export default function Projects() {
         note: "Entrada",
         created_by: user?.id ?? null,
       });
-      if (payError) alert(`Projeto criado, mas a entrada não foi registrada: ${payError.message}`);
+     if (payError) console.error("Erro ao registrar entrada:", payError.message);
     }
 
     if (form.instaladorIds.length > 0) {

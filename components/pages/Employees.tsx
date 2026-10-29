@@ -182,17 +182,26 @@ export default function Employees() {
     await loadEmployees();
   }
 
-  async function handleSubmit(evt: React.FormEvent) {
+   async function handleSubmit(evt: React.FormEvent) {
     evt.preventDefault();
+    if (saving) return;
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     if (editingId) { await handleEditSubmit(); return; }
 
     setSaving(true);
 
-    // O funcionário é cadastrado primeiro. Se ele ganhar acesso, a conta criada
-    // em seguida usa o MESMO e-mail, e o banco liga a conta a este cadastro
-    // automaticamente (sem criar um funcionário duplicado).
+    const { data: existing } = await supabase
+      .from("employees")
+      .select("id")
+      .ilike("email", form.email.trim())
+      .limit(1);
+    if (existing && existing.length > 0) {
+      setSaving(false);
+      setErrors({ email: "Já existe um funcionário cadastrado com esse e-mail." });
+      return;
+    }
+
     const { error: empError } = await supabase.from("employees").insert({
       name: form.name.trim(),
       email: form.email.trim(),
