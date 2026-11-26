@@ -231,10 +231,21 @@ export default function ProjectDetails() {
                     onChange={(e) => setAddInstaller(e.target.value)}
                     className="flex-1 rounded-lg border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-xs text-white outline-none focus:border-[#f5c518]/50"
                   >
-                    <option value="">Adicionar instalador…</option>
-                    {allInstallers.filter((i) => !project.instaladores.some((x) => x.id === i.id)).map((i) => (
-                      <option key={i.id} value={i.id}>{i.name}</option>
-                    ))}
+                    <option value="">
+                      {allInstallers.length === 0
+                        ? "Nenhum instalador cadastrado"
+                        : allInstallers.every((i) => project.instaladores.some((x) => x.id === i.id))
+                          ? "Todos os instaladores já estão na equipe"
+                          : "Adicionar instalador…"}
+                    </option>
+                    {allInstallers.map((i) => {
+                      const jaNaEquipe = project.instaladores.some((x) => x.id === i.id);
+                      return (
+                        <option key={i.id} value={i.id} disabled={jaNaEquipe}>
+                          {i.name}{jaNaEquipe ? " (já na equipe)" : ""}
+                        </option>
+                      );
+                    })}
                   </select>
                   <button
                     type="button"

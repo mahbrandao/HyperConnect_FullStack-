@@ -8,6 +8,11 @@ export type InstallerOption = { id: string; name: string };
 // o cadastro, então cruzamos com a tabela employees (pelo e-mail): só entra
 // quem está cadastrado em Funcionários, no departamento "Instalações" e não
 // "Inativo". Quem foi excluído de Funcionários também sai da lista.
+// "Instalações", "instalacoes", "Instalação "... tudo vira "instalacoes"/"instalacao"
+function normalize(s: unknown) {
+  return String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+}
+
 export async function fetchInstallers(): Promise<InstallerOption[]> {
   const [{ data: profiles }, { data: employees }] = await Promise.all([
     supabase.from("profiles").select("id, name, email").eq("team", "instalacao").order("name"),
@@ -19,7 +24,7 @@ export async function fetchInstallers(): Promise<InstallerOption[]> {
   return (profiles ?? [])
     .filter((p) => {
       const emp = rh.get(String(p.email ?? "").trim().toLowerCase());
-      return !!emp && emp.status !== "Inativo" && emp.department === "Instalações";
+      return !!emp && normalize(emp.status) !== "inativo" && normalize(emp.department).startsWith("instala");
     })
     .map((p) => ({ id: p.id, name: p.name }));
 }
