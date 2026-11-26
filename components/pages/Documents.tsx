@@ -6,9 +6,10 @@ import { supabase } from "@/lib/supabase";
 import { safeFileName } from "@/lib/storage";
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
+import { REQUIRED_DOC_TYPES } from "@/lib/documentRules";
 
-// Documentos obrigatórios de todo projeto. Para mudar, é só editar esta lista.
-const requiredTypes = ["Contrato", "RG", "Conta de água"];
+// Documentos obrigatórios: a lista fica em lib/documentRules.ts
+const requiredTypes = REQUIRED_DOC_TYPES;
 const docTypes = [...requiredTypes, "Projeto", "Técnico", "Orçamento", "Fiscal", "Manual", "Termo", "Outros"];
 const MAX_SIZE = 20 * 1024 * 1024;
 
@@ -124,6 +125,7 @@ export default function Documents() {
   }
 
   const pendingProjects = projects.filter((p) => missingFor(p.id).length > 0).length;
+  const pendingDocsTotal = projects.reduce((sum, p) => sum + missingFor(p.id).length, 0);
 
   function pickFile(f: File) {
     setFile(f);
@@ -311,7 +313,7 @@ export default function Documents() {
           <h1 className="text-xl font-bold text-white">Documentos</h1>
           <p className="text-[#888] text-sm">
             {pendingProjects > 0
-              ? `${pendingProjects} projeto${pendingProjects > 1 ? "s" : ""} com documentos pendentes.`
+              ? `${pendingDocsTotal} documento${pendingDocsTotal > 1 ? "s" : ""} pendente${pendingDocsTotal > 1 ? "s" : ""} em ${pendingProjects} projeto${pendingProjects > 1 ? "s" : ""}.`
               : "Todos os projetos estão com a documentação completa."}
           </p>
         </div>

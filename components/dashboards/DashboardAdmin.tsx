@@ -10,32 +10,35 @@ import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
 import { supabase } from "@/lib/supabase";
 import { saveProject, type ProjectEditPayload } from "@/lib/saveProject";
+import { REQUIRED_DOC_TYPES, missingDocTypes } from "@/lib/documentRules";
 
 export default function DashboardAdmin() {
   const { user } = useUser();
   const { projects, loading, error, reload } = useProjects();
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [contractProjectIds, setContractProjectIds] = useState<Set<string>>(new Set());
+  const [docRows, setDocRows] = useState<{ project_id: string | null; doc_type: string }[]>([]);
   const [docsLoaded, setDocsLoaded] = useState(false);
 
   useEffect(() => {
     supabase
       .from("documents")
-      .select("project_id")
-      .eq("doc_type", "Contrato")
+      .select("project_id, doc_type")
+      .in("doc_type", REQUIRED_DOC_TYPES)
       .then(({ data }) => {
-        setContractProjectIds(new Set((data ?? []).map((d) => d.project_id).filter(Boolean) as string[]));
+        setDocRows(data ?? []);
         setDocsLoaded(true);
       });
   }, []);
 
   if (!user) return null;
 
-  // Projetos aprovados / em instalação precisam do contrato anexado
-  const needContract = projects.filter((p) => p.stage === "Aprovado" || p.stage === "Em Instalação");
-  const docStatus = needContract.map((p) => ({ project: p, ok: contractProjectIds.has(p.id) }));
-  const okDocs = docStatus.filter((d) => d.ok).length;
-  const pendingDocs = docStatus.filter((d) => !d.ok).length;
+  // Mesma regra da tela de Documentos: todo projeto precisa dos documentos obrigatórios
+  const docStatus = projects.map((p) => {
+    const missing = missingDocTypes(p.id, docRows);
+    return { project: p, missing, ok: missing.length === 0 };
+  });
+  const pendingDocs = docStatus.reduce((s, d) => s + d.missing.length, 0);
+  const okDocs = projects.length * REQUIRED_DOC_TYPES.length - pendingDocs;
 
   async function handleSave(updatedProject: ProjectEditPayload) {
     const original = projects.find((x) => x.id === updatedProject.id) ?? null;
@@ -133,20 +136,22 @@ export default function DashboardAdmin() {
         <div className="divide-y divide-[#1e1e1e]">
           {!docsLoaded && <div className="text-center py-8 text-[#555] text-sm">Carregando...</div>}
           {docsLoaded && docStatus.length === 0 && (
-            <div className="text-center py-8 text-[#555] text-sm">Nenhum projeto aprovado ou em instalação exigindo documentos.</div>
+            <div className="text-center py-8 text-[#555] text-sm">Nenhum projeto cadastrado.</div>
           )}
-          {docsLoaded && docStatus.map(({ project, ok }) => (
+          {docsLoaded && docStatus.map(({ project, ok, missing }) => (
             <div key={project.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a1a1a] transition-colors">
               <div className={`w-2 h-2 rounded-full flex-shrink-0 ${ok ? "bg-green-400" : "bg-red-400"}`} />
               <div className="w-8 h-8 bg-red-500/15 rounded-lg flex items-center justify-center flex-shrink-0">
                 <FileText size={14} className="text-red-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-white font-medium truncate">Contrato — {project.title}</div>
-                <div className="text-xs text-[#555] truncate">{project.client}</div>
+                <div className="text-sm text-white font-medium truncate">{project.title}</div>
+                <div className="text-xs text-[#555] truncate">
+                  {project.client}{!ok && ` · Falta: ${missing.join(", ")}`}
+                </div>
               </div>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${ok ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
-                {ok ? "Em ordem" : "Pendente"}
+                {ok ? "Em ordem" : `${missing.length} pendente${missing.length > 1 ? "s" : ""}`}
               </span>
             </div>
           ))}
