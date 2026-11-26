@@ -6,6 +6,7 @@ import { Search, Plus, ChevronRight, X, Calendar, Star, Trash2, FolderKanban } f
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
 import InstallerPicker from "@/components/ui/InstallerPicker";
+import { fetchInstallers } from "@/lib/installers";
 import { supabase } from "@/lib/supabase";
 import { safeFileName } from "@/lib/storage";
 import { STAGES, stageColor, fmt, progressForProject, progressForStage } from "@/lib/projectUtils";
@@ -97,11 +98,10 @@ export default function Projects() {
   const [instaladores, setInstaladores] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    supabase.from("profiles").select("id, name, team").in("team", ["vendas", "instalacao"]).then(({ data }) => {
-      if (!data) return;
-      setVendedores(data.filter((p) => p.team === "vendas").map((p) => ({ id: p.id, name: p.name })));
-      setInstaladores(data.filter((p) => p.team === "instalacao").map((p) => ({ id: p.id, name: p.name })));
+    supabase.from("profiles").select("id, name").eq("team", "vendas").then(({ data }) => {
+      if (data) setVendedores(data.map((p) => ({ id: p.id, name: p.name })));
     });
+    fetchInstallers().then(setInstaladores);
   }, []);
 
   if (!user) return null;

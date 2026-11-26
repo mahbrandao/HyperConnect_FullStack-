@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
 import InstallerPicker from "@/components/ui/InstallerPicker";
+import { fetchInstallers } from "@/lib/installers";
 
 type ViewMode = "Mês" | "Semana" | "Lista";
 
@@ -139,9 +140,7 @@ export default function Agenda() {
   useEffect(() => { loadEvents(); }, [user?.id]);
 
   useEffect(() => {
-    supabase.from("profiles").select("id, name").eq("team", "instalacao").then(({ data }) => {
-      if (data) setInstaladores(data.map((p) => ({ id: p.id, name: p.name })));
-    });
+    fetchInstallers().then(setInstaladores);
   }, []);
 
   if (!user) return null;

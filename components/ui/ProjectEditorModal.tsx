@@ -7,6 +7,7 @@ import type { Project } from "@/interfaces/project";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabase";
 import InstallerPicker from "@/components/ui/InstallerPicker";
+import { fetchInstallers } from "@/lib/installers";
 
 type ProjectEditorModalProps = {
   project: Project | null;
@@ -48,9 +49,7 @@ export default function ProjectEditorModal({ project, open, onClose, onSave, can
 
   useEffect(() => {
     if (!open || !canEditTeam) return;
-    supabase.from("profiles").select("id, name").eq("team", "instalacao").order("name").then(({ data }) => {
-      setInstallerOptions(data ?? []);
-    });
+    fetchInstallers().then(setInstallerOptions);
   }, [open, canEditTeam]);
 
   useEffect(() => {

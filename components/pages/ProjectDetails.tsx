@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { PROJECT_SELECT, mapProjectRow, type ProjectRow } from "@/hooks/useProjects";
 import { safeFileName } from "@/lib/storage";
+import { fetchInstallers } from "@/lib/installers";
 import { saveProject, type ProjectEditPayload } from "@/lib/saveProject";
 import ProjectEditorModal from "@/components/ui/ProjectEditorModal";
 import type { Project } from "@/interfaces/project";
@@ -61,9 +62,7 @@ export default function ProjectDetails() {
   useEffect(() => { if (projectId) loadProject(); }, [projectId]);
 
   useEffect(() => {
-    supabase.from("profiles").select("id, name").eq("team", "instalacao").order("name").then(({ data }) => {
-      setAllInstallers(data ?? []);
-    });
+    fetchInstallers().then(setAllInstallers);
   }, []);
 
   async function addToTeam() {
