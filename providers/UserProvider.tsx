@@ -33,12 +33,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
       .eq("id", userId)
       .single();
 
-    if (error || !profile) {
-      console.error("Erro ao carregar perfil:", error);
-      setUser(null);
-      setLoading(false);
-      return;
-    }
+ if (error || !profile) {
+  console.error("Erro ao carregar perfil:", {
+    message: error?.message,
+    code: error?.code,
+    details: error?.details,
+    hint: error?.hint,
+    profile,
+  });
+  setUser(null);
+  setLoading(false);
+  return;
+}
 
     setUser({
       id: profile.id,

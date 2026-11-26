@@ -9,7 +9,6 @@ import type { Project } from "@/interfaces/project";
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
 import { supabase } from "@/lib/supabase";
-import { saveProject, type ProjectEditPayload } from "@/lib/saveProject";
 
 const typeIcon: Record<string, ReactElement> = {
   "Instalação fotovoltaica": <FileText size={14} />,
@@ -33,17 +32,29 @@ export default function DashboardInstalacao() {
   const done = myProjects.filter((p) => p.stage === "Concluído");
   const pending = myProjects.filter((p) => p.stage === "Aprovado");
 
-  async function handleSave(updatedProject: ProjectEditPayload) {
-    const original = projects.find((x) => x.id === updatedProject.id) ?? null;
-    const err = await saveProject(updatedProject, original, { team: user?.team, canEditTeam: canEditTeamOf(original) });
-    if (err) alert(err);
-    await reload();
-  }
+  async function handleSave(updatedProject: Project & { startDateISO?: string; endDateISO?: string; instaladorIds?: string[] }) {
+    if (!updatedProject.instaladorIds) return;
+    const original = projects.find((p) => p.id === updatedProject.id);
+    const atuais = original?.instaladores.map((i) => i.id) ?? [];
+    const novos = updatedProject.instaladorIds;
+    const adicionar = novos.filter((id) => !atuais.includes(id));
+    const remover = atuais.filter((id) => !novos.includes(id));
 
-  function canEditTeamOf(p: Project | null) {
-    if (!p || !user) return false;
-    return user.team === "gerente" || user.team === "admin" || p.vendedorId === user.id
-      || (user.team === "instalacao" && p.instaladores.some((i) => i.id === user.id));
+    if (adicionar.length > 0) {
+      const { error: e1 } = await supabase
+        .from("project_installers")
+        .insert(adicionar.map((profile_id) => ({ project_id: updatedProject.id, profile_id })));
+      if (e1) alert(`Erro ao adicionar instaladores: ${e1.message}`);
+    }
+    if (remover.length > 0) {
+      const { error: e2 } = await supabase
+        .from("project_installers")
+        .delete()
+        .eq("project_id", updatedProject.id)
+        .in("profile_id", remover);
+      if (e2) alert(`Erro ao remover instaladores: ${e2.message}`);
+    }
+    await reload();
   }
 
   function ProjectCard({ p, onEdit }: { p: Project; onEdit: (project: Project) => void }) {
@@ -80,7 +91,7 @@ export default function DashboardInstalacao() {
           className="inline-flex items-center gap-1 rounded-lg border border-[#2a2a2a] bg-[#111] px-2.5 py-1.5 text-[11px] text-[#f5c518] hover:bg-[#1a1a1a]"
         >
           <PencilLine size={12} />
-          Editar
+          Editar equipe
         </button>
       </div>
     );
@@ -170,7 +181,7 @@ export default function DashboardInstalacao() {
         open={Boolean(editingProject)}
         onClose={() => setEditingProject(null)}
         onSave={handleSave}
-        canEditTeam={canEditTeamOf(editingProject)}
+        canEditTeam
       />
     </div>
   );

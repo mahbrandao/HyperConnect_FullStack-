@@ -153,7 +153,7 @@ export default function ProjectDetails() {
             className="inline-flex items-center gap-2 rounded-lg border border-[#f5c518]/40 bg-[#f5c518]/10 px-3 py-2 text-sm font-medium text-[#f5c518] hover:bg-[#f5c518]/15"
           >
             <PencilLine size={15} />
-            Editar projeto
+            {isInstalacao ? "Editar equipe" : "Editar projeto"}
           </button>
           <Link
             href="/app/projects"

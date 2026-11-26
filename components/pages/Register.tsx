@@ -181,16 +181,6 @@ export default function Register() {
               </div>
             </div>
 
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" className="mt-0.5 accent-[#f5c518]" />
-              <span className="text-xs text-[#666]">
-                Li e aceito os{" "}
-                <a href="#" className="text-[#f5c518] hover:underline">Termos de Uso</a>
-                {" "}e a{" "}
-                <a href="#" className="text-[#f5c518] hover:underline">Política de Privacidade</a>
-              </span>
-            </label>
-
             <button
               type="submit"
               disabled={submitting}

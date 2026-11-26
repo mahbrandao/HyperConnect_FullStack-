@@ -16,27 +16,30 @@ export async function saveProject(
   const isInstalacao = opts.team === "instalacao";
   const progress = Math.max(0, Math.min(100, Math.round(Number(updated.progress) || 0)));
 
-  const { data, error } = await supabase
-    .from("projects")
-    .update({
-      title: updated.title,
-      client: updated.client,
-      type: updated.type,
-      stage: updated.stage,
-      is_priority: updated.isPriority,
-      ...(!isInstalacao
-        ? { value: updated.value, valor_sistema: updated.valorSistema ?? null, valor_mo: updated.valorMO ?? null }
-        : {}),
-      progress,
-      notes: updated.notes ?? null,
-      start_date: updated.startDateISO || null,
-      end_date: updated.endDateISO || null,
-    })
-    .eq("id", updated.id)
-    .select("id");
+  // Equipe de instalação só altera a equipe do projeto, não os dados dele
+  if (!isInstalacao) {
+    const { data, error } = await supabase
+      .from("projects")
+      .update({
+        title: updated.title,
+        client: updated.client,
+        type: updated.type,
+        stage: updated.stage,
+        is_priority: updated.isPriority,
+        value: updated.value,
+        valor_sistema: updated.valorSistema ?? null,
+        valor_mo: updated.valorMO ?? null,
+        progress,
+        notes: updated.notes ?? null,
+        start_date: updated.startDateISO || null,
+        end_date: updated.endDateISO || null,
+      })
+      .eq("id", updated.id)
+      .select("id");
 
-  if (error) return `Erro ao salvar: ${error.message}`;
-  if (!data || data.length === 0) return "Sem permissão para editar este projeto.";
+    if (error) return `Erro ao salvar: ${error.message}`;
+    if (!data || data.length === 0) return "Sem permissão para editar este projeto.";
+  }
 
   if (opts.canEditTeam && updated.instaladorIds && original) {
     const atuais = original.instaladores.map((i) => i.id);
