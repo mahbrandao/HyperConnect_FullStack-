@@ -10,6 +10,7 @@ import { useUser } from "@/hooks/useUser";
 import { PROJECT_SELECT, mapProjectRow, type ProjectRow } from "@/hooks/useProjects";
 import { safeFileName } from "@/lib/storage";
 import { fetchInstallers } from "@/lib/installers";
+import InstallerPicker from "@/components/ui/InstallerPicker";
 import { saveProject, type ProjectEditPayload } from "@/lib/saveProject";
 import ProjectEditorModal from "@/components/ui/ProjectEditorModal";
 import type { Project } from "@/interfaces/project";
@@ -27,7 +28,7 @@ export default function ProjectDetails() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [uploading, setUploading] = useState(false);
   const [allInstallers, setAllInstallers] = useState<{ id: string; name: string }[]>([]);
-  const [addInstaller, setAddInstaller] = useState("");
+  const [savingTeam, setSavingTeam] = useState(false);
 
   async function loadProject() {
     setLoading(true);
@@ -65,15 +66,25 @@ export default function ProjectDetails() {
     fetchInstallers().then(setAllInstallers);
   }, []);
 
-  async function addToTeam() {
-    if (!project || !addInstaller) return;
-    const { error } = await supabase.from("project_installers").insert({ project_id: project.id, profile_id: addInstaller });
-    if (error) { alert(`Erro ao adicionar: ${error.message}`); return; }
-    setAddInstaller("");
+  // Marca/desmarca na caixinha: adiciona quem entrou e remove quem saiu
+  async function updateTeam(ids: string[]) {
+    if (!project || savingTeam) return;
+    const atuais = project.instaladores.map((i) => i.id);
+    const novos = ids.filter((id) => !atuais.includes(id));
+    const saiu = atuais.filter((id) => !ids.includes(id));
+    setSavingTeam(true);
+    if (novos.length) {
+      const { error } = await supabase
+        .from("project_installers")
+        .insert(novos.map((profile_id) => ({ project_id: project.id, profile_id })));
+      if (error) alert(`Erro ao adicionar: ${error.message}`);
+    }
+    for (const id of saiu) await removeFromTeam(id, false);
+    setSavingTeam(false);
     await loadProject();
   }
 
-  async function removeFromTeam(profileId: string) {
+  async function removeFromTeam(profileId: string, reload = true) {
     if (!project) return;
     const { data, error } = await supabase
       .from("project_installers")
@@ -83,7 +94,7 @@ export default function ProjectDetails() {
       .select("profile_id");
     if (error) { alert(`Erro ao remover: ${error.message}`); return; }
     if (!data || data.length === 0) { alert("Sem permissão para alterar a equipe (apenas gerente, admin, o vendedor ou instaladores da equipe do projeto)."); return; }
-    await loadProject();
+    if (reload) await loadProject();
   }
 
   async function handlePhotoUpload(files: FileList | null) {
@@ -225,36 +236,20 @@ export default function ProjectDetails() {
                 ))}
               </div>
               {canManageTeam && (
-                <div className="mt-3 flex gap-2">
-                  <select
-                    value={addInstaller}
-                    onChange={(e) => setAddInstaller(e.target.value)}
-                    className="flex-1 rounded-lg border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-xs text-white outline-none focus:border-[#f5c518]/50"
-                  >
-                    <option value="">
-                      {allInstallers.length === 0
-                        ? "Nenhum instalador cadastrado"
-                        : allInstallers.every((i) => project.instaladores.some((x) => x.id === i.id))
-                          ? "Todos os instaladores já estão na equipe"
-                          : "Adicionar instalador…"}
-                    </option>
-                    {allInstallers.map((i) => {
-                      const jaNaEquipe = project.instaladores.some((x) => x.id === i.id);
-                      return (
-                        <option key={i.id} value={i.id} disabled={jaNaEquipe}>
-                          {i.name}{jaNaEquipe ? " (já na equipe)" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={addToTeam}
-                    disabled={!addInstaller}
-                    className="rounded-lg bg-[#f5c518] px-3 py-2 text-xs font-bold text-black hover:bg-[#e6b800] disabled:opacity-40"
-                  >
-                    Adicionar
-                  </button>
+                <div className={`mt-3 ${savingTeam ? "opacity-60 pointer-events-none" : ""}`}>
+                  <InstallerPicker
+                    // todos os instaladores + quem já está no projeto (pra poder desmarcar)
+                    options={[
+                      ...allInstallers,
+                      ...project.instaladores.filter((m) => !allInstallers.some((i) => i.id === m.id)),
+                    ]}
+                    selected={project.instaladores.map((i) => i.id)}
+                    onChange={updateTeam}
+                    placeholder="Marque os instaladores da equipe"
+                  />
+                  <p className="mt-1.5 text-[11px] text-[#555]">
+                    {savingTeam ? "Salvando equipe..." : "Marque para adicionar, desmarque para remover."}
+                  </p>
                 </div>
               )}
             </div>

@@ -207,7 +207,14 @@ export default function ProjectEditorModal({ project, open, onClose, onSave, can
                 <label className="mb-1.5 block text-xs font-medium text-[#888]">
                   Equipe de instalação <span className="text-[#555]">(opcional · {instaladorIds.length} selecionado(s))</span>
                 </label>
-                <InstallerPicker options={installerOptions} selected={instaladorIds} onChange={setInstaladorIds} />
+                <InstallerPicker
+                  options={[
+                    ...installerOptions,
+                    ...(project?.instaladores ?? []).filter((m) => !installerOptions.some((i) => i.id === m.id)),
+                  ]}
+                  selected={instaladorIds}
+                  onChange={setInstaladorIds}
+                />
               </div>
             ) : isInstalacao && (
               <p className="sm:col-span-2 text-sm text-[#888]">
