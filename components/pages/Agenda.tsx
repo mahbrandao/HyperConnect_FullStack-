@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, Calendar, Trash2, Ban } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, Calendar, Trash2, Ban, PencilLine, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
@@ -54,7 +54,6 @@ const typeColorMap: Record<string, string> = {
 };
 
 const DAYS_SHORT = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
-const HOURS = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"];
 const MONTH_NAMES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 function monthGrid(year: number, month: number): (number | null)[] {
@@ -113,6 +112,7 @@ export default function Agenda() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<AppEvent | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const todayIso = isoOf(new Date());
 
@@ -156,7 +156,7 @@ export default function Agenda() {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true);
-    const { error } = await supabase.from("events").insert({
+    const payload = {
       title: form.title.trim(),
       subtitle: form.sub.trim() || null,
       event_type: form.type,
@@ -164,13 +164,51 @@ export default function Agenda() {
       event_time: form.time,
       color: typeColorMap[form.type] || "orange",
       project_id: form.projectId || null,
-      created_by: user.id,
-    });
+    };
+    let errorMsg: string | null = null;
+    if (editingId) {
+      const { data, error } = await supabase.from("events").update(payload).eq("id", editingId).select("id");
+      if (error) errorMsg = error.message;
+      else if (!data || data.length === 0) errorMsg = "sem permissão para editar este compromisso.";
+    } else {
+      const { error } = await supabase.from("events").insert({ ...payload, created_by: user?.id ?? null });
+      if (error) errorMsg = error.message;
+    }
     setSaving(false);
-    if (error) { setErrors({ title: `Erro ao salvar: ${error.message}` }); return; }
+    if (errorMsg) { setErrors({ title: `Erro ao salvar: ${errorMsg}` }); return; }
+    // Leva o calendário até a data do compromisso, para ele aparecer na hora
+    const [y, m, d] = form.date.split("-").map(Number);
+    setCursor(new Date(y, m - 1, d));
+    closeForm();
+    await loadEvents();
+  }
+
+  function openNew(date = "", time = "") {
+    setEditingId(null);
+    setForm({ ...emptyForm, date, time });
+    setErrors({});
+    setOpen(true);
+  }
+
+  function openEdit(ev: AppEvent) {
+    setEditingId(ev.id);
+    setForm({ title: ev.title, type: ev.type, date: ev.date, time: ev.time, sub: ev.sub, projectId: ev.projectId ?? "" });
+    setErrors({});
+    setSelected(null);
+    setOpen(true);
+  }
+
+  function closeForm() {
     setOpen(false);
+    setEditingId(null);
     setForm(emptyForm);
     setErrors({});
+  }
+
+  async function reactivateEvent(ev: AppEvent) {
+    const { error } = await supabase.from("events").update({ status: "agendado" }).eq("id", ev.id);
+    if (error) { alert(`Erro ao reativar: ${error.message}`); return; }
+    setSelected(null);
     await loadEvents();
   }
 
@@ -194,6 +232,13 @@ export default function Agenda() {
   const canEdit = (ev: AppEvent) => user.team === "gerente" || user.team === "admin" || ev.createdBy === user.id;
 
   const inputCls = "w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#444] outline-none focus:border-[#f5c518]/50 transition-colors";
+  // Horas da visão Semana: 07h–19h por padrão, mas estende se houver compromisso fora disso
+  const weekIsos = wDates.map(isoOf);
+  const weekHours = events.filter((e) => weekIsos.includes(e.date)).map((e) => Number(e.time.slice(0, 2)));
+  const firstHour = Math.min(7, ...weekHours);
+  const lastHour = Math.max(19, ...weekHours);
+  const HOURS = Array.from({ length: lastHour - firstHour + 1 }, (_, i) => `${String(firstHour + i).padStart(2, "0")}:00`);
+
   const sortedEvents = [...events].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const evStyle = (ev: AppEvent) => (ev.status === "cancelado" ? "opacity-40 line-through" : "");
 
@@ -205,7 +250,7 @@ export default function Agenda() {
           <p className="text-[#888] text-sm">Confira os compromissos e atividades programadas.</p>
         </div>
         <button
-          onClick={() => { setOpen(true); setErrors({}); }}
+          onClick={() => openNew()}
           className="bg-[#f5c518] text-black font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-[#e6b800] transition-colors"
         >
           <Plus size={16} />
@@ -274,7 +319,9 @@ export default function Agenda() {
                   return (
                     <div
                       key={i}
-                      className={`min-h-[90px] p-2 border-b border-r border-[#1e1e1e] ${i % 7 === 6 ? "border-r-0" : ""} ${!day ? "bg-[#111]" : "hover:bg-[#1a1a1a] transition-colors"}`}
+                      onClick={() => { if (day) openNew(iso); }}
+                      title={day ? "Clique para adicionar um compromisso neste dia" : undefined}
+                      className={`min-h-[90px] p-2 border-b border-r border-[#1e1e1e] ${i % 7 === 6 ? "border-r-0" : ""} ${!day ? "bg-[#111]" : "cursor-pointer hover:bg-[#1a1a1a] transition-colors"}`}
                     >
                       {day && (
                         <>
@@ -285,13 +332,20 @@ export default function Agenda() {
                             {dayEvents.slice(0, 2).map((ev) => (
                               <button
                                 key={ev.id}
-                                onClick={() => setSelected(ev)}
+                                onClick={(e) => { e.stopPropagation(); setSelected(ev); }}
                                 className={`block w-full text-left text-[10px] px-1.5 py-0.5 rounded font-medium truncate ${COLOR_MAP[ev.color]?.cell || COLOR_MAP.orange.cell} ${evStyle(ev)}`}
                               >
                                 {ev.time} {ev.title}
                               </button>
                             ))}
-                            {dayEvents.length > 2 && <div className="text-[10px] text-[#555] px-1">+{dayEvents.length - 2} mais</div>}
+                            {dayEvents.length > 2 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setCursor(new Date(year, month, day)); setView("Semana"); }}
+                                className="text-[10px] text-[#888] px-1 hover:text-[#f5c518]"
+                              >
+                                +{dayEvents.length - 2} mais
+                              </button>
+                            )}
                           </div>
                         </>
                       )}
@@ -326,11 +380,15 @@ export default function Agenda() {
                   const iso = isoOf(d);
                   const hourEvents = eventsOnDate(iso).filter((e) => e.time.slice(0, 2) === hour.slice(0, 2));
                   return (
-                    <div key={`cell-${hour}-${colIdx}`} className="border-b border-[#1e1e1e] border-l border-[#1e1e1e] min-h-[48px] p-1 space-y-1">
+                    <div
+                      key={`cell-${hour}-${colIdx}`}
+                      onClick={() => openNew(iso, hour)}
+                      className="border-b border-[#1e1e1e] border-l border-[#1e1e1e] min-h-[48px] p-1 space-y-1 cursor-pointer hover:bg-[#1a1a1a] transition-colors"
+                    >
                       {hourEvents.map((ev) => (
                         <button
                           key={ev.id}
-                          onClick={() => setSelected(ev)}
+                          onClick={(e) => { e.stopPropagation(); setSelected(ev); }}
                           className={`block w-full text-left rounded p-2 text-xs ${COLOR_MAP[ev.color]?.cell || COLOR_MAP.orange.cell} ${evStyle(ev)}`}
                         >
                           <div className="font-semibold">{ev.time} {ev.title}</div>
@@ -402,6 +460,14 @@ export default function Agenda() {
             </div>
             {canEdit(selected) && (
               <div className="flex gap-2 mt-5">
+                <button onClick={() => openEdit(selected)} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-[#f5c518]/30 bg-[#f5c518]/10 text-[#f5c518] text-xs font-medium hover:bg-[#f5c518]/15">
+                  <PencilLine size={13} /> Editar
+                </button>
+                {selected.status === "cancelado" && (
+                  <button onClick={() => reactivateEvent(selected)} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-green-500/30 bg-green-500/10 text-green-400 text-xs font-medium hover:bg-green-500/15">
+                    <RotateCcw size={13} /> Reativar
+                  </button>
+                )}
                 {selected.status !== "cancelado" && (
                   <button onClick={() => cancelEvent(selected)} className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 text-xs font-medium hover:bg-orange-500/15">
                     <Ban size={13} /> Cancelar
@@ -419,14 +485,14 @@ export default function Agenda() {
       {/* Novo compromisso */}
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeForm} />
           <div className="relative bg-[#111] border border-[#222] rounded-2xl w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between px-6 py-5 border-b border-[#1e1e1e]">
               <div>
-                <h2 className="text-base font-bold text-white">Novo compromisso</h2>
-                <p className="text-xs text-[#555] mt-0.5">Adicione um evento à agenda.</p>
+                <h2 className="text-base font-bold text-white">{editingId ? "Editar compromisso" : "Novo compromisso"}</h2>
+                <p className="text-xs text-[#555] mt-0.5">{editingId ? "Altere as informações do compromisso." : "Adicione um evento à agenda."}</p>
               </div>
-              <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-[#1e1e1e] text-[#555] hover:text-white transition-colors"><X size={16} /></button>
+              <button onClick={closeForm} className="p-1.5 rounded-lg hover:bg-[#1e1e1e] text-[#555] hover:text-white transition-colors"><X size={16} /></button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -471,11 +537,11 @@ export default function Agenda() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setOpen(false)} className="flex-1 py-2.5 rounded-lg border border-[#222] text-sm text-[#888] hover:text-white hover:border-[#333] transition-colors font-medium">
+                <button type="button" onClick={closeForm} className="flex-1 py-2.5 rounded-lg border border-[#222] text-sm text-[#888] hover:text-white hover:border-[#333] transition-colors font-medium">
                   Cancelar
                 </button>
                 <button type="submit" disabled={saving} className="flex-1 py-2.5 rounded-lg bg-[#f5c518] text-black text-sm font-bold hover:bg-[#e6b800] transition-colors disabled:opacity-60">
-                  {saving ? "Salvando..." : "Salvar compromisso"}
+                  {saving ? "Salvando..." : editingId ? "Salvar alterações" : "Salvar compromisso"}
                 </button>
               </div>
             </form>

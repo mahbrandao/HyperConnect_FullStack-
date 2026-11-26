@@ -39,7 +39,8 @@ export function progressForStage(stage: string | undefined | null) {
 }
 
 export function progressForProject(p: Project) {
-  const computed = progressForStage(p.stage as string);
-  // prefer computed value, but fallback to stored progress if present
-  return computed || (typeof p.progress === "number" ? p.progress : 0);
+  // O progresso salvo no banco é a fonte da verdade (é o que se edita no modal).
+  // Só usamos o valor sugerido pela etapa quando nada foi salvo ainda.
+  const stored = typeof p.progress === "number" ? p.progress : 0;
+  return stored > 0 ? stored : progressForStage(p.stage as string);
 }

@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { PROJECT_SELECT, mapProjectRow, type ProjectRow } from "@/hooks/useProjects";
 import { safeFileName } from "@/lib/storage";
+import { saveProject, type ProjectEditPayload } from "@/lib/saveProject";
 import ProjectEditorModal from "@/components/ui/ProjectEditorModal";
 import type { Project } from "@/interfaces/project";
 
@@ -99,41 +100,9 @@ export default function ProjectDetails() {
     await loadPhotos();
   }
 
-  async function handleSave(updatedProject: Project & { startDateISO?: string; endDateISO?: string; instaladorIds?: string[] }) {
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        title: updatedProject.title,
-        client: updatedProject.client,
-        type: updatedProject.type,
-        stage: updatedProject.stage,
-        is_priority: updatedProject.isPriority,
-        ...(user?.team !== "instalacao"
-          ? { value: updatedProject.value, valor_sistema: updatedProject.valorSistema ?? null, valor_mo: updatedProject.valorMO ?? null }
-          : {}),
-        progress: updatedProject.progress,
-        notes: updatedProject.notes ?? null,
-        start_date: updatedProject.startDateISO || null,
-        end_date: updatedProject.endDateISO || null,
-      })
-      .eq("id", updatedProject.id);
-
-    if (error) { alert(`Erro ao salvar: ${error.message}`); return; }
-
-    if (updatedProject.instaladorIds && canManageTeamNow()) {
-      const atuais = project?.instaladores.map((i) => i.id) ?? [];
-      const novos = updatedProject.instaladorIds;
-      const adicionar = novos.filter((id) => !atuais.includes(id));
-      const remover = atuais.filter((id) => !novos.includes(id));
-      if (adicionar.length > 0) {
-        const { error: e1 } = await supabase.from("project_installers").insert(adicionar.map((profile_id) => ({ project_id: updatedProject.id, profile_id })));
-        if (e1) alert(`Erro ao adicionar instaladores: ${e1.message}`);
-      }
-      if (remover.length > 0) {
-        const { error: e2 } = await supabase.from("project_installers").delete().eq("project_id", updatedProject.id).in("profile_id", remover);
-        if (e2) alert(`Erro ao remover instaladores: ${e2.message}`);
-      }
-    }
+  async function handleSave(updatedProject: ProjectEditPayload) {
+    const err = await saveProject(updatedProject, project, { team: user?.team, canEditTeam: canManageTeamNow() });
+    if (err) alert(err);
     await loadProject();
   }
 

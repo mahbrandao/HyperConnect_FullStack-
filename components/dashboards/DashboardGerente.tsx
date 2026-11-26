@@ -9,6 +9,7 @@ import ProjectEditorModal from "@/components/ui/ProjectEditorModal";
 import { useUser } from "@/hooks/useUser";
 import { useProjects } from "@/hooks/useProjects";
 import { supabase } from "@/lib/supabase";
+import { saveProject, type ProjectEditPayload } from "@/lib/saveProject";
 
 export default function DashboardGerente() {
   const { user } = useUser();
@@ -30,24 +31,17 @@ export default function DashboardGerente() {
   const quoteCount = projects.filter((p) => p.stage === "Orçamento").length;
   const receivedPct = totalValue > 0 ? Math.round((totalReceived / totalValue) * 100) : 0;
 
-  async function handleSave(updatedProject: Project & { startDateISO?: string; endDateISO?: string }) {
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        title: updatedProject.title,
-        client: updatedProject.client,
-        type: updatedProject.type,
-        stage: updatedProject.stage,
-        is_priority: updatedProject.isPriority,
-        value: updatedProject.value,
-        progress: updatedProject.progress,
-        notes: updatedProject.notes ?? null,
-        start_date: updatedProject.startDateISO || null,
-        end_date: updatedProject.endDateISO || null,
-      })
-      .eq("id", updatedProject.id);
-    if (error) { alert(`Erro ao salvar: ${error.message}`); return; }
+  async function handleSave(updatedProject: ProjectEditPayload) {
+    const original = projects.find((x) => x.id === updatedProject.id) ?? null;
+    const err = await saveProject(updatedProject, original, { team: user?.team, canEditTeam: canEditTeamOf(original) });
+    if (err) alert(err);
     await reload();
+  }
+
+  function canEditTeamOf(p: Project | null) {
+    if (!p || !user) return false;
+    return user.team === "gerente" || user.team === "admin" || p.vendedorId === user.id
+      || (user.team === "instalacao" && p.instaladores.some((i) => i.id === user.id));
   }
 
   return (
@@ -221,6 +215,7 @@ export default function DashboardGerente() {
         open={Boolean(editingProject)}
         onClose={() => setEditingProject(null)}
         onSave={handleSave}
+        canEditTeam={canEditTeamOf(editingProject)}
       />
     </div>
   );

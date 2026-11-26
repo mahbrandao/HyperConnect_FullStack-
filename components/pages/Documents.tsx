@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, Download, FileText, Plus, X, Upload, CloudUpload, Trash2, Pencil } from "lucide-react";
+import { Search, Download, FileText, Plus, X, Upload, CloudUpload, Trash2, Pencil, Eye, ExternalLink } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { safeFileName } from "@/lib/storage";
 import { useUser } from "@/hooks/useUser";
@@ -36,6 +36,17 @@ type DocRow = {
 
 const emptyForm = { name: "", projectId: "", type: docTypes[0] };
 
+type PreviewKind = "pdf" | "image" | "text" | "office" | "other";
+
+function previewKind(path: string): PreviewKind {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "pdf") return "pdf";
+  if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(ext)) return "image";
+  if (["txt", "csv", "json", "md"].includes(ext)) return "text";
+  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) return "office";
+  return "other";
+}
+
 export default function Documents() {
   const { user } = useUser();
   const { projects } = useProjects();
@@ -52,6 +63,7 @@ export default function Documents() {
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<DocRow | null>(null);
+  const [preview, setPreview] = useState<{ doc: DocRow; url: string | null; kind: PreviewKind; error: string | null } | null>(null);
 
   async function loadDocs() {
     setLoading(true);
@@ -190,6 +202,16 @@ export default function Documents() {
     window.open(data.signedUrl, "_blank");
   }
 
+  async function handlePreview(d: DocRow) {
+    setPreview({ doc: d, url: null, kind: previewKind(d.file_path), error: null });
+    const { data, error } = await supabase.storage.from("documents").createSignedUrl(d.file_path, 600);
+    if (error || !data) {
+      setPreview((p) => (p && p.doc.id === d.id ? { ...p, error: error?.message ?? "Não foi possível abrir o arquivo." } : p));
+      return;
+    }
+    setPreview((p) => (p && p.doc.id === d.id ? { ...p, url: data.signedUrl } : p));
+  }
+
   async function handleDelete(d: DocRow) {
     if (!confirm(`Excluir "${d.name}"? Essa ação não pode ser desfeita.`)) return;
     const { data, error } = await supabase.from("documents").delete().eq("id", d.id).select("id");
@@ -265,7 +287,7 @@ export default function Documents() {
                       <FileText size={14} className="text-red-400" />
                     </div>
                     <div>
-                      <span className="text-sm text-white font-medium">{d.name}</span>
+                      <button type="button" onClick={() => handlePreview(d)} className="text-sm text-white font-medium text-left hover:text-[#f5c518] hover:underline">{d.name}</button>
                       {d.file_size ? <div className="text-[11px] text-[#555]">{(d.file_size / 1024).toFixed(1)} KB</div> : null}
                     </div>
                   </div>
@@ -282,6 +304,13 @@ export default function Documents() {
                 </td>
                 <td className="py-3.5 px-4">
                   <div className="flex items-center gap-1">
+                    <button
+                      title="Visualizar"
+                      onClick={() => handlePreview(d)}
+                      className="p-1.5 rounded-lg hover:bg-[#222] text-[#888] hover:text-[#f5c518] transition-colors"
+                    >
+                      <Eye size={14} />
+                    </button>
                     <button
                       title="Baixar"
                       onClick={() => handleDownload(d)}
@@ -314,6 +343,61 @@ export default function Documents() {
           </tbody>
         </table>
       </div>
+
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setPreview(null)} />
+          <div className="relative bg-[#111] border border-[#222] rounded-2xl w-full max-w-5xl h-[88vh] shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[#1e1e1e]">
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-white truncate">{preview.doc.name}</h2>
+                <p className="text-[11px] text-[#555] truncate">
+                  {[preview.doc.doc_type, preview.doc.project?.title, new Date(preview.doc.created_at).toLocaleDateString("pt-BR")].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {preview.url && (
+                  <a href={preview.url} target="_blank" rel="noreferrer" title="Abrir em nova aba" className="p-2 rounded-lg hover:bg-[#222] text-[#888] hover:text-white">
+                    <ExternalLink size={15} />
+                  </a>
+                )}
+                <button onClick={() => handleDownload(preview.doc)} title="Baixar" className="p-2 rounded-lg hover:bg-[#222] text-[#888] hover:text-white">
+                  <Download size={15} />
+                </button>
+                <button onClick={() => setPreview(null)} title="Fechar" className="p-2 rounded-lg hover:bg-[#222] text-[#888] hover:text-white">
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-[#0a0a0a] flex items-center justify-center overflow-auto">
+              {preview.error && <p className="text-sm text-red-400">Erro ao abrir: {preview.error}</p>}
+              {!preview.error && !preview.url && <p className="text-sm text-[#555]">Carregando documento...</p>}
+              {preview.url && (preview.kind === "pdf" || preview.kind === "text") && (
+                <iframe src={preview.url} title={preview.doc.name} className="w-full h-full bg-white" />
+              )}
+              {preview.url && preview.kind === "image" && (
+                <img src={preview.url} alt={preview.doc.name} className="max-w-full max-h-full object-contain" />
+              )}
+              {preview.url && preview.kind === "office" && (
+                <iframe
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(preview.url)}`}
+                  title={preview.doc.name}
+                  className="w-full h-full bg-white"
+                />
+              )}
+              {preview.url && preview.kind === "other" && (
+                <div className="text-center">
+                  <FileText size={36} className="mx-auto text-[#444] mb-3" />
+                  <p className="text-sm text-[#888]">Esse tipo de arquivo não tem pré-visualização.</p>
+                  <button onClick={() => handleDownload(preview.doc)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#f5c518] px-4 py-2 text-sm font-bold text-black hover:bg-[#e6b800]">
+                    <Download size={14} /> Baixar arquivo
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

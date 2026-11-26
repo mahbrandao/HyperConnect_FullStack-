@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { X } from "lucide-react";
-import { STAGES } from "@/lib/projectUtils";
+import { STAGES, progressForProject, progressForStage } from "@/lib/projectUtils";
 import type { Project } from "@/interfaces/project";
 import { useUser } from "@/hooks/useUser";
 import { supabase } from "@/lib/supabase";
@@ -55,6 +55,7 @@ export default function ProjectEditorModal({ project, open, onClose, onSave, can
       setForm({
         ...project,
         value: Number(project.value) || 0,
+        progress: progressForProject(project),
         start: brToIso(project.start),
         end: brToIso(project.end),
       });
@@ -140,13 +141,34 @@ export default function ProjectEditorModal({ project, open, onClose, onSave, can
               <label className="mb-1.5 block text-xs font-medium text-[#888]">Etapa</label>
               <select
                 value={form.stage}
-                onChange={(e) => updateField("stage", e.target.value as Project["stage"])}
+                onChange={(e) => {
+                  const stage = e.target.value as Project["stage"];
+                  setForm((prev) => (prev ? { ...prev, stage, progress: progressForStage(stage) } : prev));
+                }}
                 className="w-full rounded-lg border border-[#2a2a2a] bg-[#0d0d0d] px-3 py-2 text-sm text-white outline-none focus:border-[#f5c518]/50"
               >
                 {STAGES.map((stage) => (
                   <option key={stage} value={stage}>{stage}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-medium text-[#888]">
+                  Progresso <span className="text-[#555]">(muda sozinho com a etapa, mas você pode ajustar)</span>
+                </label>
+                <span className="text-sm font-semibold text-[#f5c518]">{form.progress}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={form.progress}
+                onChange={(e) => updateField("progress", Number(e.target.value))}
+                className="w-full accent-[#f5c518]"
+              />
             </div>
 
             <div>
